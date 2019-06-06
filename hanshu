@@ -1,0 +1,160 @@
+BOOL CSlamProc::GetCargoPosture(float x, float y, float fThita,float& x1, float& y1, float& fThita1,float fdistance)
+{
+    int nCalcuNum=10;
+    int nCalOkNum=0;
+    float fSumX,fSumY,fSumThita=0;
+    for(;nCalcuNum>0;nCalcuNum--)
+    {
+       
+        if (!m_pScanner->DataReady())
+           continue;
+
+        CScan* ScanTemp = pCurScan->MapDuplicate();
+        if(ScanTemp!=NULL)
+        {
+
+            int m_nfirstReflectorID,m_nsecondReflectorID=-1;
+
+            bool bFindFlag=ScanTemp->GetRealReflectors(m_nfirstReflectorID,m_nsecondReflectorID,fdistance, &PostureParam);
+
+            if (bFindFlag)
+            {
+                CSlamLine* m_Line=new CSlamLine(ScanTemp->m_ptReflectors[m_nfirstReflectorID],ScanTemp->m_ptReflectors[m_nsecondReflectorID]);
+                if (m_Line!=NULL)
+                {
+                    float A=0,B=0;
+                    A=1/m_Line->m_fNormalX;
+                    B=1/m_Line->m_fNormalY;
+                    CSlamPoint2d m_Point=m_Line->GetCenterPoint();
+                   
+                    float C =-(ScanTemp->m_ptReflectors[0].x*A
+                        +ScanTemp->m_ptReflectors[0].y*B);
+                  
+                    if(m_Line->SlantAngle()>PI&&m_Line->SlantAngle()<2*PI)
+                        m_Line->SlantAngle()=m_Line->SlantAngle()-PI;
+                    int fSign=(A*x+B*y+C>0)?(1):(-1);
+                    if (A>-0.0001f&&A<0.0001f)
+                    {
+                        if (fSign>0)
+                        {
+                            x1=m_Point.x;
+                            y1=m_Point.y+ABS(PostureParam.m_fRealDis_AgvLocation_To_Reflector*sin(m_Line->SlantAngle()));
+                        }
+                        else
+                        {
+                            x1=m_Point.x;
+                            y1=m_Point.y-ABS(PostureParam.m_fRealDis_AgvLocation_To_Reflector*sin(m_Line->SlantAngle()));
+                        }
+                    }
+                    else
+                    {
+                        if(B>-0.0001f&&B<0.0001f)
+                        {
+                            if (fSign>0)
+                            {
+                                x1=m_Point.x+ABS(PostureParam.m_fRealDis_AgvLocation_To_Reflector*cos(m_Line->SlantAngle()));
+                                y1=m_Point.y;
+                            }
+                            else
+                            {
+                                x1=m_Point.x-ABS(PostureParam.m_fRealDis_AgvLocation_To_Reflector*cos(m_Line->SlantAngle()));
+                                y1=m_Point.y;
+                            }
+                        }
+                        else
+                        {
+                            if (((m_Line->SlantAngle()>0&&m_Line->SlantAngle()<PI/2)||(m_Line->SlantAngle()>PI&&m_Line->SlantAngle()<3*PI/2))
+                                )
+                            {
+                                if (fSign>0)
+                                {
+                                    x1=m_Point.x+ABS(PostureParam.m_fRealDis_AgvLocation_To_Reflector*sin(m_Line->SlantAngle()));
+                                    y1=m_Point.y-ABS(PostureParam.m_fRealDis_AgvLocation_To_Reflector*cos(m_Line->SlantAngle()));
+                                }
+                                else
+                                {
+                                    x1=m_Point.x-ABS(PostureParam.m_fRealDis_AgvLocation_To_Reflector*sin(m_Line->SlantAngle()));
+                                    y1=m_Point.y+ABS(PostureParam.m_fRealDis_AgvLocation_To_Reflector*cos(m_Line->SlantAngle()));
+                                }
+                            }
+                            else if((m_Line->SlantAngle()>PI/2&&m_Line->SlantAngle()<PI)||(m_Line->SlantAngle()>3*PI/2&&m_Line->SlantAngle()<2*PI))
+                            {
+                                if (fSign>0)
+                                {
+                                    x1=m_Point.x+ABS(PostureParam.m_fRealDis_AgvLocation_To_Reflector*sin(m_Line->SlantAngle()));
+
+                                    y1=m_Point.y+ABS(PostureParam.m_fRealDis_AgvLocation_To_Reflector*cos(m_Line->SlantAngle()));
+                                }
+                                else
+                                {
+                                    x1=m_Point.x-ABS(PostureParam.m_fRealDis_AgvLocation_To_Reflector*sin(m_Line->SlantAngle()));
+                                    y1=m_Point.y-ABS(PostureParam.m_fRealDis_AgvLocation_To_Reflector*cos(m_Line->SlantAngle()));
+                                }
+                            }
+                        }
+                    }
+
+                    if(x1>=30000||x1<=10||y1>=30000||y1<=10)
+                    {
+                        delete m_Line;
+                        m_Line=NULL;
+                        delete ScanTemp;
+                        ScanTemp=NULL;
+                        continue;
+                    }
+                    CSlamAngle anotherAngle(m_Line->SlantAngle().m_fRad-PI);
+
+                    if(ABS(fThita-anotherAngle.m_fRad)>PI/2)
+                    {
+                        if(ABS(fThita-m_Line->SlantAngle().m_fRad)>PI/2)
+                        {
+                            delete m_Line;
+                            m_Line=NULL;
+                            delete ScanTemp;
+                            ScanTemp=NULL;
+                            continue;
+                        }
+                        else
+                            fThita1=m_Line->SlantAngle().m_fRad;
+                    }
+                    else
+                    {
+                        fThita1=anotherAngle.m_fRad;
+                    }
+
+                    delete m_Line;
+                    m_Line=NULL;
+                    delete ScanTemp;
+                    ScanTemp=NULL;
+                    nCalOkNum++;
+                    fSumX+=x1;
+                    fSumY+=y1;
+                    fSumThita+=fThita1;
+                }
+                else
+                {
+                    delete m_Line;
+                    m_Line=NULL;
+                    delete ScanTemp;
+                    ScanTemp=NULL;
+                }
+            }
+            else
+            {
+                delete ScanTemp;
+                ScanTemp=NULL;
+            }
+        }
+
+    }
+    if(nCalOkNum>0)
+    {
+        x1=fSumX/nCalOkNum;
+        y1=fSumY/nCalOkNum;
+        fThita1=fSumThita/nCalOkNum;
+        return TRUE;
+    }
+    else
+        return FALSE;
+
+}
